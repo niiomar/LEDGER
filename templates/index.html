@@ -1,0 +1,1223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GMM Media</title>
+<link rel="icon" type="image/jpeg" sizes="32x32" href="/static/images/logo.jpg">
+<link rel="icon" type="image/jpeg" sizes="16x16" href="/static/images/logo.jpg">
+<link rel="apple-touch-icon" sizes="180x180" href="/static/images/logo.jpg">
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<style>
+  :root {
+    --bg: #f5f5f0;
+    --surface: #ffffff;
+    --surface2: #f9f9f6;
+    --border: #e2e2da;
+    --border2: #d0d0c6;
+    --text: #1a1a18;
+    --text2: #5a5a54;
+    --text3: #8a8a82;
+    --green: #1D9E75;
+    --green-bg: #EAF3DE;
+    --green-text: #3B6D11;
+    --red: #E24B4A;
+    --red-bg: #FCEBEB;
+    --red-text: #A32D2D;
+    --blue: #185FA5;
+    --blue-bg: #E6F1FB;
+    --blue-text: #185FA5;
+    --amber: #BA7517;
+    --amber-bg: #FAEEDA;
+    --amber-text: #854F0B;
+    --radius: 8px;
+    --radius-lg: 12px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.04);
+    --sidebar-width: 220px;
+    --sidebar-collapsed-width: 60px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; overflow-x: hidden; }
+
+  /* Layout */
+  .shell { display: flex; min-height: 100vh; }
+  .sidebar { width: var(--sidebar-width); background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; position: fixed; top: 0; bottom: 0; left: 0; z-index: 100; transition: width 0.3s ease; }
+  .sidebar.collapsed { width: var(--sidebar-collapsed-width); }
+  .main { margin-left: var(--sidebar-width); flex: 1; display: flex; flex-direction: column; min-height: 100vh; transition: margin-left 0.3s ease; }
+  .sidebar.collapsed + .main { margin-left: var(--sidebar-collapsed-width); }
+
+  /* Sidebar */
+  .sidebar-logo { padding: 20px 18px 16px; border-bottom: 1px solid var(--border); overflow: hidden; white-space: nowrap; display: flex; align-items: center; gap: 12px; }
+  .sidebar-logo img { width: 34px; height: 34px; border-radius: 8px; object-fit: cover; box-shadow: 0 2px 6px rgba(0,0,0,0.05); border: 1px solid var(--border); }
+  .sidebar-logo-text { display: flex; flex-direction: column; }
+  .sidebar-logo h1 { font-size: 13px; font-weight: 700; letter-spacing: 0.04em; color: var(--text); text-transform: uppercase; }
+  .sidebar-logo p { font-size: 11px; color: var(--text3); margin-top: 2px; }
+  .sidebar-nav { padding: 12px 0; flex: 1; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 12px 18px; font-size: 13px; color: var(--text2); cursor: pointer; transition: all 0.15s; border-left: 3px solid transparent; white-space: nowrap; }
+  .nav-item i { width: 20px; text-align: center; font-size: 14px; }
+  .nav-item span { transition: opacity 0.2s; }
+  .sidebar.collapsed .nav-item span { opacity: 0; pointer-events: none; }
+  .sidebar.collapsed .sidebar-logo h1, .sidebar.collapsed .sidebar-logo p, .sidebar.collapsed .sidebar-footer { display: none; }
+  .nav-item:hover { background: var(--surface2); color: var(--text); }
+  .nav-item.active { background: var(--blue-bg); color: var(--blue); border-left-color: var(--blue); font-weight: 500; }
+  .sidebar-footer { padding: 14px 18px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text3); }
+
+  /* Topbar */
+  .topbar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 12px 28px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 50; }
+  .topbar-left { display: flex; align-items: center; gap: 15px; }
+  .collapse-btn { cursor: pointer; font-size: 18px; color: var(--text2); }
+  .topbar-title { font-size: 15px; font-weight: 600; }
+  .topbar-meta { font-size: 12px; color: var(--text3); display: flex; align-items: center; gap: 15px; }
+
+  /* Content area */
+  .content { padding: 24px 28px; flex: 1; }
+  .tab-pane { display: none; }
+  .tab-pane.active { display: block; }
+
+  /* Stats grid */
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px 18px; box-shadow: var(--shadow); }
+  .stat-card .label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text3); margin-bottom: 8px; }
+  .stat-card .value { font-size: 22px; font-weight: 700; color: var(--text); }
+  .stat-card .value.green { color: var(--green); }
+  .stat-card .value.red { color: var(--red); }
+  .stat-card .sub { font-size: 11px; color: var(--text3); margin-top: 4px; }
+
+  /* Cards */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow); margin-bottom: 20px; overflow: hidden; }
+  .card-header { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; background: var(--surface2); }
+  .card-header h3 { font-size: 13px; font-weight: 600; color: var(--text); }
+  .card-header .actions { display: flex; gap: 8px; }
+  .card-header .meta { font-size: 12px; color: var(--text3); font-weight: 400; }
+  .card-body { padding: 18px; }
+
+  /* Forms */
+  .form-grid { display: grid; gap: 14px; }
+  .form-grid.cols-2 { grid-template-columns: 1fr 1fr; }
+  .form-grid.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .form-grid.cols-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+  .form-group { display: flex; flex-direction: column; gap: 5px; }
+  .form-group label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text2); }
+  .form-group input, .form-group select, .form-group textarea {
+    padding: 8px 11px; border: 1px solid var(--border2); border-radius: var(--radius);
+    font-size: 13px; font-family: inherit; color: var(--text); background: var(--surface);
+    transition: border 0.15s; outline: none;
+  }
+  .form-group input:focus, .form-group select:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(24,95,165,0.08); }
+  .form-group input:disabled, .form-group select:disabled { background-color: #f0f0f0; cursor: not-allowed; color: #666; }
+  .form-footer { display: flex; justify-content: flex-end; gap: 8px; padding-top: 6px; border-top: 1px solid var(--border); margin-top: 16px; }
+
+  /* Buttons */
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 14px; border-radius: var(--radius); font-size: 13px; font-weight: 500; cursor: pointer; border: 1px solid var(--border2); background: var(--surface); color: var(--text2); transition: all 0.15s; white-space: nowrap; }
+  .btn:hover { background: var(--surface2); color: var(--text); border-color: var(--border2); }
+  .btn.primary { background: var(--text); color: white; border-color: var(--text); }
+  .btn.primary:hover { opacity: 0.85; }
+  .btn.danger { color: var(--red-text); border-color: #f7c1c1; }
+  .btn.danger:hover { background: var(--red-bg); }
+  .btn.success { color: var(--green-text); border-color: #c0dd97; }
+  .btn.success:hover { background: var(--green-bg); }
+  .btn.sm { padding: 5px 10px; font-size: 12px; }
+  .btn i { font-size: 12px; }
+
+  .btn-logout-new {
+    width: 100%;
+    background: #f2f2f2;
+    border: none;
+    border-radius: 10px;
+    box-shadow: 4px 4px 8px rgba(0, 0, 0, 0.07), -4px -4px 8px rgba(255, 255, 255, 0.9);
+    color: #1a1a18;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    transition: all 0.2s ease;
+    padding: 10px;
+  }
+  .btn-logout-new:hover {
+    background: #ffeded;
+    color: var(--red-text);
+    box-shadow: inset 2px 2px 5px rgba(0,0,0,0.05), inset -2px -2px 5px rgba(255,255,255,0.9);
+  }
+
+  /* Tables */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th { text-align: left; padding: 10px 14px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text3); border-bottom: 1px solid var(--border); background: var(--surface2); white-space: nowrap; }
+  tbody td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: var(--surface2); }
+  .empty-row td { text-align: center; padding: 32px; color: var(--text3); font-size: 13px; }
+
+  /* Badges */
+  .badge { display: inline-block; padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+  .badge.credit { background: var(--green-bg); color: var(--green-text); }
+  .badge.debit  { background: var(--red-bg);   color: var(--red-text); }
+  .badge.dues   { background: var(--blue-bg);  color: var(--blue-text); }
+
+  /* Custom Modals */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 2000; display: flex; align-items: center; justify-content: center; }
+  .modal { background: var(--surface); padding: 24px; border-radius: var(--radius-lg); width: 100%; max-width: 400px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); animation: popIn 0.25s ease-out; }
+  .modal h3 { font-size: 18px; margin-bottom: 8px; color: var(--text); display:flex; align-items:center; gap:10px;}
+  .modal p { color: var(--text2); font-size: 14px; margin-bottom: 24px; line-height: 1.5; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
+  @keyframes popIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+  /* Alerts */
+  .alert { padding: 10px 14px; border-radius: var(--radius); font-size: 13px; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+  .alert.success { background: var(--green-bg); color: var(--green-text); border: 1px solid #c0dd97; }
+  .alert.error   { background: var(--red-bg);   color: var(--red-text);   border: 1px solid #f7c1c1; }
+  .alert.info    { background: var(--blue-bg);  color: var(--blue-text);  border: 1px solid #b5d4f4; }
+
+  /* 50/50 Split Login Screen */
+  #login-overlay { position: fixed; inset: 0; background: var(--surface); z-index: 1000; display: flex; align-items: stretch; }
+  .login-left { flex: 1; background: var(--surface2); display: flex; flex-direction: column; align-items: center; justify-content: center; border-right: 1px solid var(--border); padding: 40px; text-align: center; }
+  .login-left img { width: 260px; height: 260px; border-radius: 36px; object-fit: cover; box-shadow: 0 24px 48px rgba(0,0,0,0.08), 0 8px 16px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.03); margin-bottom: 40px; background-color: var(--surface); transition: transform 0.4s ease; }
+  .login-left img:hover { transform: translateY(-4px); }
+  .login-left h1 { font-size: 32px; font-weight: 700; color: var(--text); letter-spacing: -0.01em; }
+  .login-left p { font-size: 15px; color: var(--text3); margin-top: 10px; max-width: 360px; line-height: 1.6; }
+  .login-right { flex: 1; display: flex; align-items: center; justify-content: center; background: var(--surface); }
+  .login-card { width: 100%; max-width: 380px; padding: 40px; }
+  .login-card h2 { font-size: 24px; margin-bottom: 8px; color: var(--text); }
+  .login-card > p { font-size: 14px; color: var(--text3); margin-bottom: 36px; }
+  .login-card .form-group { margin-bottom: 20px; }
+  .login-card .btn.primary { padding: 12px; font-size: 14px; font-weight: 600; border-radius: var(--radius-lg); }
+
+  @media (max-width: 768px) {
+    #login-overlay { flex-direction: column; }
+    .login-left { display: none; }
+    .login-right { padding: 20px; }
+    .login-card { border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow); padding: 32px; }
+  }
+
+  .editable-name { cursor: pointer; padding: 4px 8px; border-radius: 4px; border: 1px solid transparent; transition: all 0.2s; }
+  .editable-name:hover { background: var(--blue-bg); border-color: var(--blue); }
+  .edit-input { padding: 4px 8px; border: 1px solid var(--blue); border-radius: 4px; font-size: 13px; width: 100%; outline: none; }
+
+  @media print {
+    .sidebar, .topbar, .btn, .card-header .actions, .form-grid, .form-footer, .filter-bar { display: none !important; }
+    .main { margin-left: 0 !important; }
+    .content { padding: 0 !important; }
+    .card { border: none !important; box-shadow: none !important; }
+    .tab-pane { display: none !important; }
+    #tab-report { display: block !important; }
+  }
+  .report-header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid var(--text); padding-bottom: 15px; }
+  .report-header h1 { font-size: 20px; text-transform: uppercase; }
+  .report-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 30px; }
+  .report-summary-item { border: 1px solid var(--border); padding: 15px; border-radius: 8px; text-align: center; }
+  .report-summary-item .label { font-size: 12px; color: var(--text3); text-transform: uppercase; margin-bottom: 5px; }
+  .report-summary-item .value { font-size: 18px; font-weight: 700; }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .balance-pos { color: var(--green); font-weight: 600; }
+  .balance-neg { color: var(--red);   font-weight: 600; }
+  .text-muted { color: var(--text3); font-size: 12px; }
+  .section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text3); margin-bottom: 12px; }
+
+  .filter-bar { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; padding: 14px 18px; background: var(--surface2); border-bottom: 1px solid var(--border); }
+  .filter-bar .form-group { min-width: 140px; }
+  .filter-bar .form-group label { margin-bottom: 4px; }
+  .filter-bar input, .filter-bar select { padding: 7px 10px; font-size: 12px; }
+
+  .avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--blue-bg); color: var(--blue); font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+
+  .spinner { border: 2px solid var(--border); border-top-color: var(--blue); border-radius: 50%; width: 16px; height: 16px; animation: spin 0.7s linear infinite; display: inline-block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  @media (max-width: 900px) {
+    .stats-grid { grid-template-columns: repeat(2,1fr); }
+    .two-col { grid-template-columns: 1fr; }
+    .form-grid.cols-3, .form-grid.cols-4 { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div id="confirm-modal" class="modal-overlay" style="display:none;">
+  <div class="modal">
+    <h3><i class="fa-solid fa-triangle-exclamation" style="color:var(--red);"></i> Confirm Deletion</h3>
+    <p id="modal-msg">Are you sure you want to delete this record?</p>
+    <div class="modal-actions">
+      <button class="btn" onclick="$('confirm-modal').style.display='none'">Cancel</button>
+      <button class="btn danger" id="modal-confirm-btn">Yes, Delete It</button>
+    </div>
+  </div>
+</div>
+
+<div id="login-overlay">
+  <div class="login-left">
+    <img src="/static/images/logo.jpg" alt="GMM Logo">
+    <p>Secure portal for managing contributions, dues, and financial ledgers.</p>
+  </div>
+  <div class="login-right">
+    <div class="login-card">
+      <h2>Welcome Back</h2>
+      <p>Please log in to your account to continue.</p>
+      <div class="form-group">
+        <label>Username</label>
+        <input type="text" id="login-user" placeholder="Enter username..." onkeydown="if(event.key==='Enter') $('login-pass').focus()">
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="login-pass" placeholder="Enter password..." onkeydown="if(event.key==='Enter') doLogin()">
+        <div style="text-align: right; margin-top: 6px;">
+          <a href="#" onclick="alert('Password reset link sent to registered admin email.')" style="font-size: 11px; color: var(--blue); text-decoration: none; font-weight: 600;">Forgot Password?</a>
+        </div>
+      </div>
+      <div id="login-alert" style="margin-top:10px"></div>
+      <button class="btn primary" style="width:100%; margin-top:15px;" onclick="doLogin()">
+        <i class="fa-solid fa-lock-open"></i> Login
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="shell" id="app-shell" style="display:none">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-logo">
+      <img src="/static/images/logo.jpg" alt="GMM Logo">
+      <div class="sidebar-logo-text">
+        <h1>GMM Media</h1>
+        <p>Contributions System</p>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-item active" onclick="showTab('dashboard',this)">
+        <i class="fa-solid fa-chart-pie"></i> <span>Dashboard</span>
+      </div>
+      <div class="nav-item" onclick="showTab('dues',this)">
+        <i class="fa-solid fa-money-bill-wave"></i> <span>Log Dues</span>
+      </div>
+      <div class="nav-item" onclick="showTab('ledger',this)">
+        <i class="fa-solid fa-receipt"></i> <span>Ledger</span>
+      </div>
+      <div class="nav-item" onclick="showTab('query',this)">
+        <i class="fa-solid fa-magnifying-glass"></i> <span>Query Records</span>
+      </div>
+      <div class="nav-item" onclick="showTab('members',this)">
+        <i class="fa-solid fa-users"></i> <span>Members</span>
+      </div>
+      <div class="nav-item" onclick="showTab('report',this)">
+        <i class="fa-solid fa-file-invoice"></i> <span>Reports</span>
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <button class="btn-logout-new" onclick="doLogout()" title="Logout">
+        <span>Logout</span>
+        <i class="fa-solid fa-arrow-right-from-bracket fa-flip-horizontal"></i>
+      </button>
+    </div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-left">
+        <div class="collapse-btn" onclick="toggleSidebar()"><i class="fa-solid fa-bars"></i></div>
+        <span class="topbar-title" id="page-title">Dashboard</span>
+      </div>
+      <div class="topbar-meta">
+        <span id="topbar-meta"></span>
+        <span id="current-time" class="text-muted"></span>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <div id="tab-dashboard" class="tab-pane active">
+        <div class="stats-grid" id="stats-grid">
+          <div class="stat-card"><div class="label">Loading…</div><div class="value">—</div></div>
+          <div class="stat-card"><div class="label">Loading…</div><div class="value">—</div></div>
+          <div class="stat-card"><div class="label">Loading…</div><div class="value">—</div></div>
+          <div class="stat-card"><div class="label">Loading…</div><div class="value">—</div></div>
+        </div>
+        <div class="two-col">
+          <div class="card">
+            <div class="card-header"><h3>Recent Transactions</h3></div>
+            <div class="table-wrap">
+              <table id="dash-ledger-table">
+                <thead><tr><th>Date</th><th>Description</th><th>Type</th><th>Amount (Gh¢)</th><th>Balance</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header"><h3>Top Dues Contributors</h3></div>
+            <div class="table-wrap">
+              <table id="dash-dues-table">
+                <thead><tr><th>Member</th><th>Paid (Gh¢)</th><th>Coverage</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="tab-dues" class="tab-pane">
+        <div class="card">
+          <div class="card-header"><h3>Record Dues Payment</h3></div>
+          <div class="card-body">
+            <div id="dues-alert"></div>
+            <div class="form-grid cols-2">
+              <div class="form-group">
+                <label>Member</label>
+                <select id="dues-member" onchange="autoFillNextMonth()"><option value="">— Select member —</option></select>
+              </div>
+              <div class="form-group">
+                <label>Amount Paid (Gh¢) <span id="dues-amount-hint" style="font-weight:400;color:#888;font-size:0.85em"></span></label>
+                <input type="number" id="dues-amount" placeholder="Auto-calculated from period" min="1" step="0.01" readonly style="background:#f5f5f5;cursor:not-allowed">
+              </div>
+              <div class="form-group">
+                <label>Paying From (Period)</label>
+                <select id="dues-from" onchange="onDuesPeriodChange()"><option value="">— Select period —</option></select>
+              </div>
+              <div class="form-group">
+                <label>Paying To (Period)</label>
+                <select id="dues-to" onchange="onDuesPeriodChange()"><option value="">— Select period —</option></select>
+              </div>
+            </div>
+            <div class="form-footer">
+              <button class="btn" onclick="clearForm('dues')"><i class="fa-solid fa-xmark"></i> Clear</button>
+              <button class="btn primary" onclick="saveDues()"><i class="fa-solid fa-check"></i> Save Record</button>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <h3>All Dues Records</h3>
+            <span class="meta" id="dues-count"></span>
+          </div>
+          <div class="table-wrap">
+            <table id="dues-table">
+              <thead><tr><th>#</th><th>Member</th><th>Amount (Gh¢)</th><th>From</th><th>To</th><th>Recorded</th><th></th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div id="tab-ledger" class="tab-pane">
+        <div class="card">
+          <div class="card-header"><h3>Record Transaction</h3></div>
+          <div class="card-body">
+            <div id="ledger-alert"></div>
+            <div class="form-grid cols-4">
+              <div class="form-group">
+                <label>Type</label>
+                <select id="tx-type">
+                  <option value="Credit">Credit (Income)</option>
+                  <option value="Debit">Debit (Expense)</option>
+                </select>
+              </div>
+              <div class="form-group" style="grid-column: span 2;">
+                <label>Description</label>
+                <input type="text" id="tx-desc" placeholder="e.g. Batteries, Dues, Equipment…">
+              </div>
+              <div class="form-group">
+                <label>Amount (Gh¢)</label>
+                <input type="number" id="tx-amount" placeholder="e.g. 68" min="0.01" step="0.01">
+              </div>
+              <div class="form-group">
+                <label>Date</label>
+                <input type="date" id="tx-date">
+              </div>
+              <div class="form-group" style="grid-column: span 3;">
+                <label>Note (optional)</label>
+                <input type="text" id="tx-note" placeholder="Any additional detail">
+              </div>
+            </div>
+            <div class="form-footer">
+              <button class="btn" onclick="clearForm('ledger')"><i class="fa-solid fa-xmark"></i> Clear</button>
+              <button class="btn primary" onclick="saveLedger()"><i class="fa-solid fa-check"></i> Save Transaction</button>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <h3>Transaction History</h3>
+            <div class="actions">
+                <button class="btn sm" onclick="exportToExcel('ledger-table', 'GMM_Ledger')"><i class="fa-solid fa-file-excel"></i> Export Excel</button>
+                <span class="meta" id="ledger-count"></span>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table id="ledger-table">
+              <thead><tr><th>#</th><th>Date</th><th>Description</th><th>Type</th><th>Amount (Gh¢)</th><th>Balance</th><th>Note</th><th></th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div id="tab-query" class="tab-pane">
+        <div class="card">
+          <div class="filter-bar">
+            <div class="form-group">
+              <label>Record Type</label>
+              <select id="q-type" onchange="runQuery()">
+                <option value="all">All Records</option>
+                <option value="dues">Dues Only</option>
+                <option value="ledger">Ledger Only</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Member</label>
+              <select id="q-member" onchange="runQuery()">
+                <option value="">— All Members —</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Search Keyword</label>
+              <input type="text" id="q-keyword" placeholder="Search..." oninput="runQuery()">
+            </div>
+            <div class="form-group">
+              <label>From Month</label>
+              <input type="month" id="q-date-from" onchange="runQuery()">
+            </div>
+            <div class="form-group">
+              <label>To Month</label>
+              <input type="month" id="q-date-to" onchange="runQuery()">
+            </div>
+            <button class="btn" onclick="clearQuery()"><i class="fa-solid fa-rotate-left"></i> Reset</button>
+            
+            <div style="flex-grow: 1; text-align: right;">
+               <button class="btn success" onclick="printQuery()"><i class="fa-solid fa-print"></i> Print Results</button>
+            </div>
+          </div>
+          <div class="card-header">
+            <h3>Search Results</h3>
+            <span class="meta" id="q-count">0 results</span>
+          </div>
+          <div class="table-wrap">
+            <table id="q-table">
+              <thead><tr><th>Type</th><th>Label/Description</th><th>Amount (Gh¢)</th><th>Date/Period</th><th>Detail</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div id="tab-members" class="tab-pane">
+        <div class="card">
+          <div class="card-header"><h3>Add New Member</h3></div>
+          <div class="card-body">
+            <div id="member-alert"></div>
+            <div class="form-grid cols-2">
+              <div class="form-group">
+                <label>Full Name</label>
+                <input type="text" id="new-member-name" placeholder="Enter member name...">
+              </div>
+              <div class="form-group" style="justify-content: flex-end; flex-direction: row; align-items: flex-end;">
+                <button class="btn primary" onclick="addMember()"><i class="fa-solid fa-plus"></i> Add Member</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <h3>Member Roster</h3>
+            <span class="meta" id="member-count"></span>
+          </div>
+          <div class="table-wrap">
+            <table id="members-table">
+              <thead><tr><th>#</th><th>Name (Click to edit)</th><th>Total Dues (Gh¢)</th><th>Actions</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div id="tab-report" class="tab-pane">
+        <div class="card">
+          <div class="card-header">
+            <h3>Generate Financial Report</h3>
+            <div class="actions">
+                <input type="month" id="report-month" value="">
+                <button class="btn primary sm" onclick="generateReport('monthly')"><i class="fa-solid fa-calendar"></i> Monthly</button>
+                <button class="btn sm" style="background:var(--blue); color:white; border:none;" onclick="generateReport('all')"><i class="fa-solid fa-globe"></i> All-Time</button>
+                <button class="btn success sm" onclick="window.print()"><i class="fa-solid fa-print"></i> Print</button>
+            </div>
+          </div>
+          <div class="card-body" id="report-container">
+            <div class="empty-row" style="text-align:center; padding: 40px;">
+                <i class="fa-solid fa-file-invoice" style="font-size: 48px; color: var(--border2); margin-bottom: 15px;"></i>
+                <p>Select a period and click Generate to view the report.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const api = async (url, opt={}) => {
+  if (opt.body) opt.body = JSON.stringify(opt.body);
+  opt.headers = {'Content-Type': 'application/json'};
+  opt.credentials = 'same-origin';
+  const res = await fetch(url, opt);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Request failed');
+  return data;
+};
+
+const ghc = n => 'Gh¢ ' + (parseFloat(n)||0).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
+const initials = name => name.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase();
+const today = () => new Date().toISOString().split('T')[0];
+const currentMonth = () => new Date().toISOString().slice(0, 7);
+
+// Custom Confirmation Modal Logic
+function confirmAction(title, msg, callback) {
+    $('modal-msg').innerHTML = msg;
+    $('confirm-modal').style.display = 'flex';
+    
+    const confirmBtn = $('modal-confirm-btn');
+    const newBtn = confirmBtn.cloneNode(true);
+    confirmBtn.parentNode.replaceChild(newBtn, confirmBtn);
+    
+    newBtn.addEventListener('click', () => {
+        $('confirm-modal').style.display = 'none';
+        callback();
+    });
+}
+
+
+// Auth 
+async function doLogin() {
+    const username = $('login-user').value;
+    const password = $('login-pass').value;
+    try {
+        await api('/api/login', {method: 'POST', body: {username, password}});
+        $('login-overlay').style.display = 'none';
+        $('app-shell').style.display = 'flex';
+        initApp();
+    } catch(e) {
+        showAlert('login-alert', e.message, 'error');
+    }
+}
+
+function doLogout() {
+    location.reload();
+}
+
+// Sidebar
+function toggleSidebar() {
+    $('sidebar').classList.toggle('collapsed');
+}
+
+// Navigation
+function showTab(tab, el) {
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+  $('tab-' + tab).classList.add('active');
+  if (el) el.classList.add('active');
+  $('page-title').textContent = el ? el.innerText.trim() : tab.charAt(0).toUpperCase() + tab.slice(1);
+  
+  if (tab === 'dashboard') loadDashboard();
+  if (tab === 'dues') loadDues();
+  if (tab === 'ledger') loadLedger();
+  if (tab === 'members') loadMembers();
+  if (tab === 'query') runQuery();
+}
+
+function showAlert(id, msg, type='success') {
+  const el = $(id);
+  el.innerHTML = `<div class="alert ${type}"><i class="fa-solid fa-${type==='success'?'circle-check':'circle-exclamation'}"></i> ${msg}</div>`;
+  setTimeout(() => el.innerHTML = '', 4000);
+}
+
+// Dashboard
+async function loadDashboard() {
+  const [summary, ledger, dues] = await Promise.all([
+    api('/api/ledger/summary'),
+    api('/api/ledger'),
+    api('/api/dues')
+  ]);
+
+  $('stats-grid').innerHTML = `
+    <div class="stat-card">
+      <div class="label">Total Balance</div>
+      <div class="value ${summary.balance >= 0 ? 'green' : 'red'}">${ghc(summary.balance)}</div>
+      <div class="sub">Current available liquid cash</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Total Dues</div>
+      <div class="value">${ghc(summary.total_dues)}</div>
+      <div class="sub">Actual cash received from members</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Total Credits</div>
+      <div class="value green">${ghc(summary.total_credits)}</div>
+      <div class="sub">All income across all categories</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Total Debits</div>
+      <div class="value red">${ghc(summary.total_debits)}</div>
+      <div class="sub">Total recorded expenses paid</div>
+    </div>
+  `;
+
+  $('topbar-meta').textContent = `Balance: ${ghc(summary.balance)}`;
+
+  const recentRows = ledger.slice(0, 8);
+  $('dash-ledger-table').querySelector('tbody').innerHTML = recentRows.length
+    ? recentRows.map(r => `
+      <tr>
+        <td>${r.date}</td>
+        <td>${r.description}</td>
+        <td><span class="badge ${r.type.toLowerCase()}">${r.type}</span></td>
+        <td>${ghc(r.amount)}</td>
+        <td class="${r.running_balance >= 0 ? 'balance-pos' : 'balance-neg'}">${ghc(r.running_balance)}</td>
+      </tr>`).join('')
+    : '<tr class="empty-row"><td colspan="5">No transactions recorded yet.</td></tr>';
+
+  const top = [...dues].sort((a,b) => b.amount - a.amount).slice(0, 8);
+  $('dash-dues-table').querySelector('tbody').innerHTML = top.map(d => `
+    <tr>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="avatar">${initials(d.member_name)}</div>
+          ${d.member_name}
+        </div>
+      </td>
+      <td>${ghc(d.amount)}</td>
+      <td class="text-muted">${d.period_from} &rarr; ${d.period_to}</td>
+    </tr>`).join('');
+}
+
+// Dues
+async function loadDues() {
+  const rows = await api('/api/dues');
+  $('dues-count').textContent = rows.length + ' records';
+  $('dues-table').querySelector('tbody').innerHTML = rows.length
+    ? rows.map((d, i) => `
+      <tr>
+        <td class="text-muted">${rows.length - i}</td>
+        <td>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div class="avatar">${initials(d.member_name)}</div>${d.member_name}
+          </div>
+        </td>
+        <td>${ghc(d.amount)}</td>
+        <td>${d.period_from}</td>
+        <td>${d.period_to}</td>
+        <td class="text-muted">${d.created_at.split(' ')[0]}</td>
+        <td>
+          <button class="btn sm danger" onclick="deleteDues(${d.id})">
+            <i class="fa-solid fa-trash"></i>
+          </button>
+        </td>
+      </tr>`).join('')
+    : '<tr class="empty-row"><td colspan="7">No dues records yet.</td></tr>';
+}
+
+function onDuesPeriodChange() {
+  const from = $('dues-from').value;
+  const to   = $('dues-to').value;
+  if (!from || !to) { $('dues-amount').value = ''; $('dues-amount-hint').textContent = ''; return; }
+  const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  function mIdx(s) { const p=s.split(' '); return parseInt(p[1])*12+MONTHS.indexOf(p[0]); }
+  const f = mIdx(from), t = mIdx(to);
+  if (t < f) { $('dues-amount-hint').textContent = '⚠ To must be after From'; $('dues-amount').value=''; return; }
+  const months = t - f + 1;
+  const amount = months * 20;
+  $('dues-amount').value = amount;
+  $('dues-amount-hint').textContent = `(${months} month${months>1?'s':''} × Gh¢20)`;
+}
+
+function getNextMonthStr(monthStr) {
+  const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const parts = monthStr.split(' ');
+  if (parts.length !== 2) return null;
+  
+  let mIdx = MONTHS.indexOf(parts[0]);
+  let year = parseInt(parts[1]);
+
+  mIdx++; 
+  if (mIdx > 11) {
+    mIdx = 0; 
+    year++;   
+  }
+  return `${MONTHS[mIdx]} ${year}`;
+}
+
+function getMonthValue(monthStr) {
+  const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const parts = monthStr.split(' ');
+  if (parts.length !== 2) return 0;
+  return parseInt(parts[1]) * 12 + MONTHS.indexOf(parts[0]);
+}
+
+async function autoFillNextMonth() {
+  const memberId = $('dues-member').value;
+  const fromSelect = $('dues-from');
+  
+  if (!memberId) {
+    fromSelect.value = '';
+    fromSelect.disabled = false; 
+    $('dues-to').value = '';
+    onDuesPeriodChange();
+    return;
+  }
+
+  try {
+    const dues = await api(`/api/dues?member_id=${memberId}`);
+    
+    if (dues && dues.length > 0) {
+      let latestRecord = dues[0];
+      let maxVal = getMonthValue(latestRecord.period_to);
+      
+      for (let i = 1; i < dues.length; i++) {
+          let val = getMonthValue(dues[i].period_to);
+          if (val > maxVal) {
+              maxVal = val;
+              latestRecord = dues[i];
+          }
+      }
+      
+      const lastPaidMonth = latestRecord.period_to; 
+      const nextMonth = getNextMonthStr(lastPaidMonth);
+
+      if (nextMonth) {
+        fromSelect.value = nextMonth;
+        fromSelect.disabled = true; 
+        showAlert('dues-alert', `Locked starting period to <b>${nextMonth}</b> to prevent gaps in the ledger.`, 'info');
+      }
+    } else {
+      fromSelect.value = '';
+      fromSelect.disabled = false; 
+    }
+    
+    $('dues-to').value = ''; 
+    onDuesPeriodChange(); 
+    
+  } catch (e) {
+    console.error("Failed to fetch member dues history", e);
+  }
+}
+
+async function saveDues() {
+  const member_id   = $('dues-member').value;
+  const amount      = $('dues-amount').value;
+  const period_from = $('dues-from').value;
+  const period_to   = $('dues-to').value;
+  if (!member_id || !amount || !period_from || !period_to) {
+    showAlert('dues-alert','Please select a member and payment period.','error'); return;
+  }
+  try {
+    await api('/api/dues', {method:'POST', body:{member_id, amount:parseFloat(amount), period_from, period_to}});
+    showAlert('dues-alert','Dues recorded and ledger updated automatically.');
+    clearForm('dues');
+    loadDues();
+    loadDashboard();
+  } catch(e) { showAlert('dues-alert', e.message, 'error'); }
+}
+
+function deleteDues(id) {
+  confirmAction("Delete Dues", "Are you sure you want to permanently delete this dues record? This action cannot be undone.", async () => {
+      await api('/api/dues/' + id, {method:'DELETE'});
+      loadDues();
+  });
+}
+
+function clearForm(form) {
+  if (form === 'dues') {
+    $('dues-member').value=''; 
+    $('dues-amount').value=''; 
+    $('dues-amount-hint').textContent='';
+    $('dues-from').value=''; 
+    $('dues-from').disabled = false; 
+    $('dues-to').value='';
+    $('dues-alert').innerHTML = ''; 
+  } else if (form === 'ledger') {
+    $('tx-type').value='Credit'; 
+    $('tx-desc').value='';
+    $('tx-amount').value=''; 
+    $('tx-note').value='';
+    $('tx-date').value = today();
+  }
+}
+
+// Ledger
+async function loadLedger() {
+  const rows = await api('/api/ledger');
+  $('ledger-count').textContent = rows.length + ' transactions';
+  $('ledger-table').querySelector('tbody').innerHTML = rows.length
+    ? rows.map((r, i) => `
+      <tr>
+        <td class="text-muted">${rows.length - i}</td>
+        <td>${r.date}</td>
+        <td>${r.description}</td>
+        <td><span class="badge ${r.type.toLowerCase()}">${r.type}</span></td>
+        <td>${ghc(r.amount)}</td>
+        <td class="${r.running_balance >= 0 ? 'balance-pos' : 'balance-neg'}">${ghc(r.running_balance)}</td>
+        <td class="text-muted">${r.note || '—'}</td>
+        <td>
+          <button class="btn sm danger" onclick="deleteLedger(${r.id})">
+            <i class="fa-solid fa-trash"></i>
+          </button>
+        </td>
+      </tr>`).join('')
+    : '<tr class="empty-row"><td colspan="8">No transactions recorded yet.</td></tr>';
+}
+
+async function saveLedger() {
+  const type        = $('tx-type').value;
+  const description = $('tx-desc').value.trim();
+  const amount      = $('tx-amount').value;
+  const date        = $('tx-date').value;
+  const note        = $('tx-note').value.trim();
+  if (!description || !amount || !date) {
+    showAlert('ledger-alert','Description, amount, and date are required.','error'); return;
+  }
+  try {
+    await api('/api/ledger', {method:'POST', body:{type, description, amount:parseFloat(amount), date, note}});
+    showAlert('ledger-alert','Transaction saved successfully.');
+    clearForm('ledger');
+    loadLedger();
+  } catch(e) { showAlert('ledger-alert', e.message, 'error'); }
+}
+
+function deleteLedger(id) {
+  confirmAction("Delete Transaction", "Deleting this transaction will completely recalculate the running balance for all future entries. Are you sure?", async () => {
+      await api('/api/ledger/' + id, {method:'DELETE'});
+      loadLedger();
+  });
+}
+
+// Query & Print
+async function runQuery() {
+  const type      = $('q-type').value;
+  const memberId  = $('q-member').value;
+  const keyword   = $('q-keyword').value.trim();
+  const dateFrom  = $('q-date-from').value;
+  const dateTo    = $('q-date-to').value;
+
+  let rows = [];
+
+  if (type !== 'ledger') {
+    let dues = await api('/api/dues' + (memberId ? '?member_id='+memberId : ''));
+    if (keyword) dues = dues.filter(d => d.member_name.toLowerCase().includes(keyword.toLowerCase()));
+    dues.forEach(d => rows.push({
+      badge: 'dues', label: d.member_name,
+      amount: d.amount, period: d.period_from + ' → ' + d.period_to,
+      detail: ghc(d.amount) + ' paid'
+    }));
+  }
+
+  if (type !== 'dues') {
+    const params = new URLSearchParams();
+    if (keyword)   params.set('keyword', keyword);
+    if (dateFrom)  params.set('date_from', dateFrom + '-01');
+    if (dateTo)    params.set('date_to', dateTo + '-31');
+    let txns = await api('/api/ledger?' + params);
+    if (memberId) txns = []; 
+    txns.forEach(t => rows.push({
+      badge: t.type.toLowerCase(), label: t.description,
+      amount: t.amount, period: t.date,
+      detail: t.note || '—'
+    }));
+  }
+
+  $('q-count').textContent = rows.length + ' result' + (rows.length !== 1 ? 's' : '');
+  $('q-table').querySelector('tbody').innerHTML = rows.length
+    ? rows.map(r => `
+      <tr>
+        <td><span class="badge ${r.badge}">${r.badge==='dues'?'Dues':r.badge.charAt(0).toUpperCase()+r.badge.slice(1)}</span></td>
+        <td>${r.label}</td>
+        <td>${ghc(r.amount)}</td>
+        <td class="text-muted">${r.period}</td>
+        <td class="text-muted">${r.detail}</td>
+      </tr>`).join('')
+    : '<tr class="empty-row"><td colspan="5">No records match your search.</td></tr>';
+}
+
+function clearQuery() {
+  ['q-type','q-member'].forEach(id => $(id).value = id.includes('type') ? 'all' : '');
+  ['q-keyword','q-date-from','q-date-to'].forEach(id => $(id).value = '');
+  runQuery();
+}
+
+function printQuery() {
+    const printContents = $('q-table').outerHTML;
+    const metaCount = $('q-count').innerText;
+    
+    const printWindow = window.open('', '', 'height=700,width=900');
+    printWindow.document.write('<html><head><title>Print Records - GMM Kasoa Media</title>');
+    printWindow.document.write('<style>');
+    printWindow.document.write('body { font-family: "Segoe UI", system-ui, sans-serif; color: #1a1a18; padding: 20px; }');
+    printWindow.document.write('h2 { font-size: 18px; margin-bottom: 5px; text-transform: uppercase; border-bottom: 2px solid #000; padding-bottom: 10px; }');
+    printWindow.document.write('p { font-size: 13px; color: #5a5a54; margin-bottom: 20px; }');
+    printWindow.document.write('table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }');
+    printWindow.document.write('th, td { border: 1px solid #d0d0c6; padding: 10px 14px; text-align: left; }');
+    printWindow.document.write('th { background-color: #f9f9f6; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #8a8a82; }');
+    printWindow.document.write('.badge { display: inline-block; padding: 3px 9px; border-radius: 4px; font-size: 11px; font-weight: 600; border: 1px solid #d0d0c6;}');
+    printWindow.document.write('</style>');
+    printWindow.document.write('</head><body>');
+    printWindow.document.write('<h2>Filtered Records Query</h2>');
+    printWindow.document.write('<p>Generated on: ' + new Date().toLocaleString() + ' | Total: ' + metaCount + '</p>');
+    printWindow.document.write(printContents);
+    printWindow.document.write('</body></html>');
+    printWindow.document.close();
+    
+    setTimeout(() => {
+        printWindow.print();
+    }, 250);
+}
+
+// Members
+async function loadMembers() {
+  const [members, dues] = await Promise.all([api('/api/members'), api('/api/dues')]);
+  const duesByMember = {};
+  dues.forEach(d => { duesByMember[d.member_id] = (duesByMember[d.member_id]||0) + d.amount; });
+
+  $('member-count').textContent = members.length + ' members';
+  $('members-table').querySelector('tbody').innerHTML = members.map((m, i) => `
+    <tr>
+      <td class="text-muted">${i+1}</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="avatar">${initials(m.name)}</div>
+          <div class="editable-name" id="member-name-${m.id}" onclick="editMemberName(${m.id}, '${m.name}')">${m.name}</div>
+        </div>
+      </td>
+      <td>${ghc(duesByMember[m.id] || 0)}</td>
+      <td>
+        <button class="btn sm danger" onclick="deleteMember(${m.id},'${m.name}')">
+          <i class="fa-solid fa-trash"></i>
+        </button>
+      </td>
+    </tr>`).join('');
+}
+
+function editMemberName(id, currentName) {
+    const cell = $(`member-name-${id}`);
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = currentName;
+    input.className = 'edit-input';
+    input.onblur = () => saveMemberName(id, input.value, currentName);
+    input.onkeydown = (e) => {
+        if (e.key === 'Enter') saveMemberName(id, input.value, currentName);
+        if (e.key === 'Escape') cell.innerText = currentName;
+    };
+    cell.innerHTML = '';
+    cell.appendChild(input);
+    input.focus();
+}
+
+async function saveMemberName(id, newName, oldName) {
+    if (!newName.trim() || newName.trim() === oldName) {
+        $(`member-name-${id}`).innerText = oldName;
+        return;
+    }
+    try {
+        await api(`/api/members/${id}`, {method: 'PUT', body: {name: newName}});
+        loadMembers();
+        loadMemberDropdowns();
+    } catch(e) {
+        alert(e.message);
+        $(`member-name-${id}`).innerText = oldName;
+    }
+}
+
+async function addMember() {
+  const name = $('new-member-name').value.trim();
+  if (!name) { showAlert('member-alert','Please enter a name.','error'); return; }
+  try {
+    await api('/api/members', {method:'POST', body:{name}});
+    showAlert('member-alert','Member added successfully.');
+    $('new-member-name').value = '';
+    loadMemberDropdowns();
+    loadMembers();
+  } catch(e) { showAlert('member-alert', e.message, 'error'); }
+}
+
+function deleteMember(id, name) {
+  confirmAction("Remove Member", `Are you completely sure you want to remove <b>${name}</b> from the roster? This will instantly destroy all their dues records.`, async () => {
+      await api('/api/members/' + id, {method:'DELETE'});
+      loadMemberDropdowns();
+      loadMembers();
+  });
+}
+
+// Reports
+async function generateReport(type = 'monthly') {
+    const container = $('report-container');
+    container.innerHTML = '<div style="text-align:center; padding:40px;"><div class="spinner"></div><p>Generating report...</p></div>';
+    
+    try {
+        let data, titlePeriod;
+        
+        // Fetch global summary for the overall balance
+        const globalSummary = await api('/api/ledger/summary');
+
+        if (type === 'all') {
+            data = await api(`/api/reports/comprehensive`);
+            titlePeriod = 'All-Time Comprehensive Report';
+        } else {
+            const month = $('report-month').value;
+            if (!month) { alert('Please select a month'); return; }
+            data = await api(`/api/reports/monthly?month=${month}`);
+            const [year, mon] = month.split('-');
+            titlePeriod = new Date(year, mon-1).toLocaleString('default', { month: 'long', year: 'numeric' });
+        }
+
+        // Fetch the raw dues table to grab the fully merged coverage periods
+        const rawDues = await api('/api/dues');
+
+        // Dynamically build the dues section based on the report type
+        let duesTableHtml = '';
+        if (type === 'all') {
+            duesTableHtml = `
+                <h4 style="margin-bottom:10px; margin-top:25px; text-transform:uppercase; color:var(--text3); font-size:12px; letter-spacing:0.05em;">Member Dues Coverage</h4>
+                <table style="margin-bottom:30px;">
+                    <thead>
+                        <tr>
+                            <th>Type</th>
+                            <th>Description</th>
+                            <th>Member Name</th>
+                            <th>Amount (Gh¢)</th>
+                            <th>Coverage Period</th>
+                            <th>Detail</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rawDues.length ? rawDues.map(d => `
+                            <tr>
+                                <td><span class="badge credit">Credit</span></td>
+                                <td>Dues</td>
+                                <td>${d.member_name}</td>
+                                <td>${ghc(d.amount)}</td>
+                                <td class="text-muted">${d.period_from} &rarr; ${d.period_to}</td>
+                                <td class="text-muted">${ghc(d.amount)} paid</td>
+                            </tr>
+                        `).join('') : '<tr><td colspan="6" style="text-align:center">No dues records found</td></tr>'}
+                    </tbody>
+                </table>
+            `;
+        } else {
+            duesTableHtml = `
+                <h4 style="margin-bottom:10px; margin-top:25px; text-transform:uppercase; color:var(--text3); font-size:12px; letter-spacing:0.05em;">Dues Collected (Receipts)</h4>
+                <table style="margin-bottom:30px;">
+                    <thead>
+                        <tr>
+                            <th>Date Paid</th>
+                            <th>Member</th>
+                            <th>Coverage Period</th>
+                            <th>Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data.dues.length ? data.dues.map(d => `
+                            <tr>
+                                <td>${d.created_at.split(' ')[0]}</td>
+                                <td>${d.member_name}</td>
+                                <td>${d.period_from}${d.period_to ? ' &rarr; ' + d.period_to : ''}</td>
+                                <td>${ghc(d.amount)}</td>
+                            </tr>
+                        `).join('') : '<tr><td colspan="4" style="text-align:center">No dues collected for this period</td></tr>'}
+                    </tbody>
+                </table>
+            `;
+        }
+
+        let html = `
+            <div class="report-header">
+                <h1>GMM Kasoa Media - Financial Report</h1>
+                <p>Period: ${titlePeriod}</p>
+            </div>
+            
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="label">Total Balance</div>
+                    <div class="value ${globalSummary.balance >= 0 ? 'green' : 'red'}">${ghc(globalSummary.balance)}</div>
+                    <div class="sub">Current available liquid cash</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">Total Dues</div>
+                    <div class="value">${ghc(data.summary.dues)}</div>
+                    <div class="sub">Actual cash received from members</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">Total Credits</div>
+                    <div class="value green">${ghc(data.summary.credits)}</div>
+                    <div class="sub">All income across all categories</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">Total Debits</div>
+                    <div class="value red">${ghc(data.summary.debits)}</div>
+                    <div class="sub">Total recorded expenses paid</div>
+                </div>
+            </div>
+            
+            ${duesTableHtml}
+            
+            <h4 style="margin-bottom:10px; text-transform:uppercase; color:var(--text3); font-size:12px; letter-spacing:0.05em;">Ledger Transactions</h4>
+            <table style="margin-bottom:30px;">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Description</th>
+                        <th>Type</th>
+                        <th>Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${data.ledger.length ? data.ledger.map(r => `
+                        <tr>
+                            <td>${r.date}</td>
+                            <td>${r.description}</td>
+                            <td><span class="badge ${r.type.toLowerCase()}">${r.type}</span></td>
+                            <td>${ghc(r.amount)}</td>
+                        </tr>
+                    `).join('') : '<tr><td colspan="4" style="text-align:center">No ledger entries for this period</td></tr>'}
+                </tbody>
+            </table>
+        `;
+        container.innerHTML = html;
+    } catch(e) {
+        container.innerHTML = `<div class="alert error">${e.message}</div>`;
+    }
+}
+
+// Init
+async function loadMemberDropdowns() {
+  const members = await api('/api/members');
+  const opts = '<option value="">— Select member —</option>' + 
+    members.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
+  $('dues-member').innerHTML = opts;
+  $('q-member').innerHTML = '<option value="">— All Members —</option>' + 
+    members.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
+
+  const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const years = [2024, 2025, 2026];
+  let pOpts = '<option value="">— Select period —</option>';
+  years.forEach(y => months.forEach(m => pOpts += `<option value="${m} ${y}">${m} ${y}</option>`));
+  $('dues-from').innerHTML = pOpts;
+  $('dues-to').innerHTML = pOpts;
+}
+
+function updateTime() {
+    const now = new Date();
+    $('current-time').textContent = now.toLocaleString();
+}
+
+function initApp() {
+    $('tx-date').value = today();
+    $('report-month').value = currentMonth();
+    loadMemberDropdowns();
+    loadDashboard();
+    setInterval(updateTime, 1000);
+    updateTime();
+}
+
+window.onload = () => {};
+</script>
+</body>
+</html>
