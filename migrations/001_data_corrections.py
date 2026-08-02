@@ -18,6 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from config import DB_PATH
 import sqlite3
+from contextlib import closing
 
 
 def get_db():
@@ -77,7 +78,7 @@ def merge_dues_for_member(conn, member_id):
 
 
 def run():
-    with get_db() as conn:
+    with closing(get_db()) as conn, conn:
         conn.execute("""
             UPDATE dues SET period_to = 'June 2025'
             WHERE period_from = 'October 2024' AND period_to = 'September 2025' AND amount = 180
