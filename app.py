@@ -1,10 +1,16 @@
 from flask import Flask, jsonify, request, render_template, session
-import sqlite3, os, datetime
+import sqlite3, os, datetime, hmac, secrets
+from contextlib import closing
 from config import SECRET_KEY, ADMIN_PASSWORD, DB_PATH
 from auth import login_required
 
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+# Not forcing SESSION_COOKIE_SECURE: this app is served over plain HTTP on
+# the local network by default, and a Secure cookie would silently stop
+# being sent, breaking login. Turn it on if you put this behind HTTPS.
 DB = DB_PATH
 
 MONTHS = ["January","February","March","April","May","June",
@@ -17,6 +23,14 @@ def month_to_int(s):
 def int_to_month(n):
     return f"{MONTHS[n % 12]} {n // 12}"
 
+def parse_positive_amount(value):
+    """Returns a positive float, or None if value isn't a valid positive number."""
+    try:
+        amount = float(value)
+    except (TypeError, ValueError):
+        return None
+    return amount if amount > 0 else None
+
 def get_db():
     conn = sqlite3.connect(DB)
     conn.row_factory = sqlite3.Row
@@ -24,7 +38,7 @@ def get_db():
     return conn
 
 def init_db():
-    with get_db() as conn:
+    with closing(get_db()) as conn, conn:
         conn.executescript("""
         CREATE TABLE IF NOT EXISTS members (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -47,9 +61,17 @@ def init_db():
             amount REAL NOT NULL,
             date TEXT NOT NULL,
             note TEXT DEFAULT '',
+            dues_id INTEGER REFERENCES dues(id) ON DELETE CASCADE,
             created_at TEXT DEFAULT (datetime('now','localtime'))
         );
+
+        CREATE INDEX IF NOT EXISTS idx_dues_member_id ON dues(member_id);
+        CREATE INDEX IF NOT EXISTS idx_ledger_date ON ledger(date);
         """)
+        cols = [r['name'] for r in conn.execute("PRAGMA table_info(ledger)").fetchall()]
+        if 'dues_id' not in cols:
+            conn.execute("ALTER TABLE ledger ADD COLUMN dues_id INTEGER REFERENCES dues(id) ON DELETE CASCADE")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ledger_dues_id ON ledger(dues_id)")
 
 def merge_dues_for_member(conn, member_id):
     rows = conn.execute(
@@ -83,20 +105,30 @@ def merge_dues_for_member(conn, member_id):
 
     all_orig_ids = [r['id'] for r in intervals]
     if len(merged) == len(intervals):
-        return  
+        return
+
+    # Re-point ledger rows at the new merged dues id before dropping the old
+    # rows, otherwise ledger.dues_id's ON DELETE CASCADE would wipe out the
+    # cash entries that funded this coverage period.
+    for m in merged:
+        orig_ids = m.get('merged_ids', [m['id']])
+        cur = conn.execute(
+            "INSERT INTO dues(member_id, amount, period_from, period_to) VALUES(?,?,?,?)",
+            (member_id, round(m['amount'], 2), int_to_month(m['from']), int_to_month(m['to']))
+        )
+        new_id = cur.lastrowid
+        placeholders = ','.join('?' * len(orig_ids))
+        conn.execute(
+            f"UPDATE ledger SET dues_id=? WHERE dues_id IN ({placeholders})",
+            (new_id, *orig_ids)
+        )
 
     for rid in all_orig_ids:
         conn.execute("DELETE FROM dues WHERE id=?", (rid,))
 
-    for m in merged:
-        conn.execute(
-            "INSERT INTO dues(member_id, amount, period_from, period_to) VALUES(?,?,?,?)",
-            (member_id, round(m['amount'], 2), int_to_month(m['from']), int_to_month(m['to']))
-        )
-
 
 def seed_data():
-    with get_db() as conn:
+    with closing(get_db()) as conn, conn:
         if conn.execute("SELECT COUNT(*) FROM members").fetchone()[0] > 0:
             return
 
@@ -186,7 +218,7 @@ def seed_data():
 
 @app.route('/api/members', methods=['GET'])
 def get_members():
-    with get_db() as conn:
+    with closing(get_db()) as conn, conn:
         rows = conn.execute("SELECT * FROM members ORDER BY name").fetchall()
         return jsonify([dict(r) for r in rows])
 
@@ -198,7 +230,7 @@ def add_member():
     if not name:
         return jsonify({'error': 'Name is required'}), 400
     try:
-        with get_db() as conn:
+        with closing(get_db()) as conn, conn:
             cur = conn.execute("INSERT INTO members(name) VALUES(?)", (name,))
             return jsonify({'id': cur.lastrowid, 'name': name}), 201
     except sqlite3.IntegrityError:
@@ -212,7 +244,7 @@ def update_member(mid):
     if not name:
         return jsonify({'error': 'Name is required'}), 400
     try:
-        with get_db() as conn:
+        with closing(get_db()) as conn, conn:
             conn.execute("UPDATE members SET name=? WHERE id=?", (name, mid))
             return jsonify({'id': mid, 'name': name})
     except sqlite3.IntegrityError:
@@ -221,14 +253,14 @@ def update_member(mid):
 @app.route('/api/members/<int:mid>', methods=['DELETE'])
 @login_required
 def delete_member(mid):
-    with get_db() as conn:
+    with closing(get_db()) as conn, conn:
         conn.execute("DELETE FROM members WHERE id=?", (mid,))
         return jsonify({'ok': True})
 
 @app.route('/api/dues', methods=['GET'])
 def get_dues():
     member_id = request.args.get('member_id')
-    with get_db() as conn:
+    with closing(get_db()) as conn, conn:
         if member_id:
             rows = conn.execute("""
                 SELECT d.*, m.name as member_name
@@ -247,33 +279,36 @@ def get_dues():
 @login_required
 def add_dues():
     data = request.json
-    member_id   = data.get('member_id')
-    amount      = data.get('amount')
+    try:
+        member_id = int(data.get('member_id'))
+    except (TypeError, ValueError):
+        member_id = None
+    amount      = parse_positive_amount(data.get('amount'))
     period_from = (data.get('period_from') or '').strip()
     period_to   = (data.get('period_to')   or '').strip()
-    if not all([member_id, amount, period_from, period_to]):
+    if not member_id or amount is None or not period_from or not period_to:
         return jsonify({'error': 'All fields required'}), 400
-    if float(amount) <= 0:
-        return jsonify({'error': 'Amount must be positive'}), 400
 
-    with get_db() as conn:
+    with closing(get_db()) as conn, conn:
         member = conn.execute("SELECT name FROM members WHERE id=?", (member_id,)).fetchone()
         if not member:
             return jsonify({'error': 'Member not found'}), 404
 
-        conn.execute(
+        cur = conn.execute(
             "INSERT INTO dues(member_id,amount,period_from,period_to) VALUES(?,?,?,?)",
-            (member_id, float(amount), period_from, period_to)
+            (member_id, amount, period_from, period_to)
         )
-        merge_dues_for_member(conn, member_id)
+        dues_id = cur.lastrowid
 
         today = datetime.date.today().isoformat()
         desc  = f"Dues – {member['name']}"
         note  = f"{period_from} → {period_to}"
         conn.execute(
-            "INSERT INTO ledger(type,description,amount,date,note) VALUES(?,?,?,?,?)",
-            ('Credit', desc, float(amount), today, note)
+            "INSERT INTO ledger(type,description,amount,date,note,dues_id) VALUES(?,?,?,?,?,?)",
+            ('Credit', desc, amount, today, note, dues_id)
         )
+
+        merge_dues_for_member(conn, member_id)
 
         rows = conn.execute("""
             SELECT d.*, m.name as member_name FROM dues d
@@ -286,23 +321,34 @@ def add_dues():
 @login_required
 def update_dues(did):
     data = request.json
-    amount      = data.get('amount')
+    amount      = parse_positive_amount(data.get('amount'))
     period_from = (data.get('period_from') or '').strip()
     period_to   = (data.get('period_to')   or '').strip()
-    if not all([amount, period_from, period_to]):
+    if amount is None or not period_from or not period_to:
         return jsonify({'error': 'amount, period_from, and period_to are required'}), 400
-    if float(amount) <= 0:
-        return jsonify({'error': 'Amount must be positive'}), 400
 
-    with get_db() as conn:
+    with closing(get_db()) as conn, conn:
         row = conn.execute("SELECT member_id FROM dues WHERE id=?", (did,)).fetchone()
         if not row:
             return jsonify({'error': 'Dues record not found'}), 404
         member_id = row['member_id']
         conn.execute(
             "UPDATE dues SET amount=?, period_from=?, period_to=? WHERE id=?",
-            (float(amount), period_from, period_to, did)
+            (amount, period_from, period_to, did)
         )
+
+        # A dues record can fund more than one ledger entry once periods have
+        # been merged (merge_dues_for_member). Only sync the amount back down
+        # when there's exactly one linked payment to avoid overwriting
+        # multiple real cash entries with one new total; always refresh the
+        # note so displayed coverage periods stay current.
+        note = f"{period_from} → {period_to}"
+        linked = conn.execute("SELECT id FROM ledger WHERE dues_id=?", (did,)).fetchall()
+        if len(linked) == 1:
+            conn.execute("UPDATE ledger SET amount=?, note=? WHERE id=?", (amount, note, linked[0]['id']))
+        elif linked:
+            conn.execute("UPDATE ledger SET note=? WHERE dues_id=?", (note, did))
+
         merge_dues_for_member(conn, member_id)
         rows = conn.execute("""
             SELECT d.*, m.name as member_name FROM dues d
@@ -314,7 +360,9 @@ def update_dues(did):
 @app.route('/api/dues/<int:did>', methods=['DELETE'])
 @login_required
 def delete_dues(did):
-    with get_db() as conn:
+    # ledger.dues_id is ON DELETE CASCADE, so any ledger entries funding this
+    # coverage record are removed automatically along with it.
+    with closing(get_db()) as conn, conn:
         conn.execute("DELETE FROM dues WHERE id=?", (did,))
         return jsonify({'ok': True})
 
@@ -337,7 +385,7 @@ def get_ledger():
         query += " AND type = ?"; params.append(tx_type)
     query += " ORDER BY date ASC, id ASC"
 
-    with get_db() as conn:
+    with closing(get_db()) as conn, conn:
         rows = conn.execute(query, params).fetchall()
         result = []
         balance = 0
@@ -349,12 +397,13 @@ def get_ledger():
 
 @app.route('/api/ledger/summary', methods=['GET'])
 def ledger_summary():
-    with get_db() as conn:
+    with closing(get_db()) as conn, conn:
         credits     = conn.execute("SELECT COALESCE(SUM(amount),0) as s FROM ledger WHERE type='Credit'").fetchone()['s']
         debits      = conn.execute("SELECT COALESCE(SUM(amount),0) as s FROM ledger WHERE type='Debit'").fetchone()['s']
         
-        # FIX: Calculate dues from actual cash receipts in the ledger, not the coverage table
-        dues_total  = conn.execute("SELECT COALESCE(SUM(amount),0) as s FROM ledger WHERE type='Credit' AND description LIKE 'Dues%'").fetchone()['s']
+        # Dues total = actual cash receipts in the ledger that are linked to a
+        # dues coverage record, not a string match on the description.
+        dues_total  = conn.execute("SELECT COALESCE(SUM(amount),0) as s FROM ledger WHERE type='Credit' AND dues_id IS NOT NULL").fetchone()['s']
         
         member_count= conn.execute("SELECT COUNT(*) as c FROM members").fetchone()['c']
         dues_count  = conn.execute("SELECT COUNT(*) as c FROM dues").fetchone()['c']
@@ -375,17 +424,15 @@ def add_ledger():
     data = request.json
     typ  = data.get('type')
     desc = (data.get('description') or '').strip()
-    amount = data.get('amount')
+    amount = parse_positive_amount(data.get('amount'))
     date   = (data.get('date') or '').strip()
     note   = (data.get('note') or '').strip()
-    if typ not in ('Credit', 'Debit') or not desc or not amount or not date:
+    if typ not in ('Credit', 'Debit') or not desc or amount is None or not date:
         return jsonify({'error': 'type, description, amount, and date are required'}), 400
-    if float(amount) <= 0:
-        return jsonify({'error': 'Amount must be positive'}), 400
-    with get_db() as conn:
+    with closing(get_db()) as conn, conn:
         cur = conn.execute(
             "INSERT INTO ledger(type,description,amount,date,note) VALUES(?,?,?,?,?)",
-            (typ, desc, float(amount), date, note)
+            (typ, desc, amount, date, note)
         )
         row = conn.execute("SELECT * FROM ledger WHERE id=?", (cur.lastrowid,)).fetchone()
         return jsonify(dict(row)), 201
@@ -396,43 +443,65 @@ def update_ledger(lid):
     data = request.json
     typ  = data.get('type')
     desc = (data.get('description') or '').strip()
-    amount = data.get('amount')
+    amount = parse_positive_amount(data.get('amount'))
     date   = (data.get('date') or '').strip()
     note   = (data.get('note') or '').strip()
-    if typ not in ('Credit', 'Debit') or not desc or not amount or not date:
+    if typ not in ('Credit', 'Debit') or not desc or amount is None or not date:
         return jsonify({'error': 'type, description, amount, and date are required'}), 400
-    if float(amount) <= 0:
-        return jsonify({'error': 'Amount must be positive'}), 400
-    with get_db() as conn:
+    with closing(get_db()) as conn, conn:
         conn.execute(
             "UPDATE ledger SET type=?, description=?, amount=?, date=?, note=? WHERE id=?",
-            (typ, desc, float(amount), date, note, lid)
+            (typ, desc, amount, date, note, lid)
         )
         row = conn.execute("SELECT * FROM ledger WHERE id=?", (lid,)).fetchone()
+        if row['dues_id']:
+            total = conn.execute(
+                "SELECT COALESCE(SUM(amount),0) as s FROM ledger WHERE dues_id=?", (row['dues_id'],)
+            ).fetchone()['s']
+            conn.execute("UPDATE dues SET amount=? WHERE id=?", (round(total, 2), row['dues_id']))
         return jsonify(dict(row))
 
 @app.route('/api/ledger/<int:lid>', methods=['DELETE'])
 @login_required
 def delete_ledger(lid):
-    with get_db() as conn:
+    with closing(get_db()) as conn, conn:
+        row = conn.execute("SELECT dues_id FROM ledger WHERE id=?", (lid,)).fetchone()
         conn.execute("DELETE FROM ledger WHERE id=?", (lid,))
+        if row and row['dues_id']:
+            remaining = conn.execute(
+                "SELECT COALESCE(SUM(amount),0) as s FROM ledger WHERE dues_id=?", (row['dues_id'],)
+            ).fetchone()['s']
+            if remaining <= 0:
+                conn.execute("DELETE FROM dues WHERE id=?", (row['dues_id'],))
+            else:
+                conn.execute("UPDATE dues SET amount=? WHERE id=?", (round(remaining, 2), row['dues_id']))
         return jsonify({'ok': True})
 
 @app.route('/api/login', methods=['POST'])
 def login():
     data = request.json
-    username = data.get('username')
-    password = data.get('password')
-    if username == "admin" and password == ADMIN_PASSWORD:
+    username = str(data.get('username') or '')
+    password = str(data.get('password') or '')
+    if username == "admin" and hmac.compare_digest(password, ADMIN_PASSWORD):
         session['authenticated'] = True
-        return jsonify({'ok': True})
+        session['csrf_token'] = secrets.token_hex(32)
+        return jsonify({'ok': True, 'csrf_token': session['csrf_token']})
     return jsonify({'error': 'Invalid username or password'}), 401
 
 
 @app.route('/api/logout', methods=['POST'])
 def logout():
     session.pop('authenticated', None)
+    session.pop('csrf_token', None)
     return jsonify({'ok': True})
+
+@app.route('/api/session', methods=['GET'])
+def get_session():
+    if not session.get('authenticated'):
+        return jsonify({'authenticated': False})
+    if not session.get('csrf_token'):
+        session['csrf_token'] = secrets.token_hex(32)
+    return jsonify({'authenticated': True, 'csrf_token': session['csrf_token']})
 
 @app.route('/api/reports/monthly', methods=['GET'])
 def monthly_report():
@@ -440,29 +509,29 @@ def monthly_report():
     if not month:
         return jsonify({'error': 'Month is required'}), 400
 
-    with get_db() as conn:
+    with closing(get_db()) as conn, conn:
         ledger = conn.execute("""
-            SELECT * FROM ledger
-            WHERE strftime('%Y-%m', date) = ?
-            ORDER BY date ASC
+            SELECT l.*, m.name as dues_member_name, d.period_from as dues_period_from, d.period_to as dues_period_to
+            FROM ledger l
+            LEFT JOIN dues d ON l.dues_id = d.id
+            LEFT JOIN members m ON d.member_id = m.id
+            WHERE strftime('%Y-%m', l.date) = ?
+            ORDER BY l.date ASC
         """, (month,)).fetchall()
 
         dues_list = []
         general_ledger = []
         for r in ledger:
-            if r['type'] == 'Credit' and r['description'].startswith('Dues'):
-                member_name = r['description'].replace('Dues – ', '').replace('Dues - ', '').strip()
-                period = r['note']
-                parts = period.split(' → ')
+            if r['dues_id'] is not None:
                 dues_list.append({
                     'created_at': r['date'],
-                    'member_name': member_name,
-                    'period_from': parts[0].strip() if len(parts) > 0 else period,
-                    'period_to': parts[1].strip() if len(parts) > 1 else period,
+                    'member_name': r['dues_member_name'],
+                    'period_from': r['dues_period_from'],
+                    'period_to': r['dues_period_to'],
                     'amount': r['amount']
                 })
             else:
-                general_ledger.append(dict(r))
+                general_ledger.append({k: r[k] for k in ('id','type','description','amount','date','note','dues_id','created_at')})
 
         summary = {
             'credits':      sum(r['amount'] for r in ledger if r['type'] == 'Credit'),
@@ -481,25 +550,28 @@ def monthly_report():
 
 @app.route('/api/reports/comprehensive', methods=['GET'])
 def comprehensive_report():
-    with get_db() as conn:
-        ledger = conn.execute("SELECT * FROM ledger ORDER BY date ASC").fetchall()
+    with closing(get_db()) as conn, conn:
+        ledger = conn.execute("""
+            SELECT l.*, m.name as dues_member_name, d.period_from as dues_period_from, d.period_to as dues_period_to
+            FROM ledger l
+            LEFT JOIN dues d ON l.dues_id = d.id
+            LEFT JOIN members m ON d.member_id = m.id
+            ORDER BY l.date ASC
+        """).fetchall()
 
         dues_list = []
         general_ledger = []
         for r in ledger:
-            if r['type'] == 'Credit' and r['description'].startswith('Dues'):
-                member_name = r['description'].replace('Dues – ', '').replace('Dues - ', '').strip()
-                period = r['note']
-                parts = period.split(' → ')
+            if r['dues_id'] is not None:
                 dues_list.append({
                     'created_at': r['date'],
-                    'member_name': member_name,
-                    'period_from': parts[0].strip() if len(parts) > 0 else period,
-                    'period_to': parts[1].strip() if len(parts) > 1 else period,
+                    'member_name': r['dues_member_name'],
+                    'period_from': r['dues_period_from'],
+                    'period_to': r['dues_period_to'],
                     'amount': r['amount']
                 })
             else:
-                general_ledger.append(dict(r))
+                general_ledger.append({k: r[k] for k in ('id','type','description','amount','date','note','dues_id','created_at')})
 
         summary = {
             'credits':      sum(r['amount'] for r in ledger if r['type'] == 'Credit'),
@@ -516,30 +588,6 @@ def comprehensive_report():
             'summary': summary
         })
 
-@app.route('/api/dues/validate', methods=['POST'])
-def validate_dues():
-    data = request.json
-    period_from = (data.get('period_from') or '').strip()
-    period_to   = (data.get('period_to')   or '').strip()
-    amount      = data.get('amount')
-    if not all([period_from, period_to, amount]):
-        return jsonify({'error': 'period_from, period_to, and amount are required'}), 400
-    try:
-        f = month_to_int(period_from)
-        t = month_to_int(period_to)
-        if t < f:
-            return jsonify({'error': 'period_to cannot be before period_from'}), 400
-        months   = t - f + 1
-        expected = months * 20
-        return jsonify({
-            'months':   months,
-            'expected': expected,
-            'actual':   float(amount),
-            'ok':       abs(expected - float(amount)) < 0.01
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 400
-
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -547,5 +595,9 @@ def index():
 if __name__ == '__main__':
     init_db()
     seed_data()
+    if SECRET_KEY == "dev-only-change-me" or ADMIN_PASSWORD in ("admin", "change-me"):
+        print("\n  WARNING: SECRET_KEY and/or ADMIN_PASSWORD are still set to their")
+        print("  insecure defaults. Anyone on your network can log in and the")
+        print("  session cookie can be forged. Set real values in your .env file.\n")
     print("\n  GMM Kasoa Media System running at http://127.0.0.1:5000\n")
     app.run(debug=False, host='0.0.0.0', port=5000)
