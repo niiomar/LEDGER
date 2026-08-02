@@ -264,9 +264,6 @@
       <div class="form-group">
         <label>Password</label>
         <input type="password" id="login-pass" placeholder="Enter password..." onkeydown="if(event.key==='Enter') doLogin()">
-        <div style="text-align: right; margin-top: 6px;">
-          <a href="#" onclick="alert('Password reset link sent to registered admin email.')" style="font-size: 11px; color: var(--blue); text-decoration: none; font-weight: 600;">Forgot Password?</a>
-        </div>
       </div>
       <div id="login-alert" style="margin-top:10px"></div>
       <button class="btn primary" style="width:100%; margin-top:15px;" onclick="doLogin()">
@@ -556,9 +553,11 @@
 
 <script>
 const $ = id => document.getElementById(id);
+let csrfToken = '';
 const api = async (url, opt={}) => {
   if (opt.body) opt.body = JSON.stringify(opt.body);
   opt.headers = {'Content-Type': 'application/json'};
+  if (csrfToken) opt.headers['X-CSRF-Token'] = csrfToken;
   opt.credentials = 'same-origin';
   const res = await fetch(url, opt);
   const data = await res.json();
@@ -568,6 +567,7 @@ const api = async (url, opt={}) => {
 
 const ghc = n => 'Gh¢ ' + (parseFloat(n)||0).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
 const initials = name => name.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase();
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const today = () => new Date().toISOString().split('T')[0];
 const currentMonth = () => new Date().toISOString().slice(0, 7);
 
@@ -592,7 +592,8 @@ async function doLogin() {
     const username = $('login-user').value;
     const password = $('login-pass').value;
     try {
-        await api('/api/login', {method: 'POST', body: {username, password}});
+        const data = await api('/api/login', {method: 'POST', body: {username, password}});
+        csrfToken = data.csrf_token;
         $('login-overlay').style.display = 'none';
         $('app-shell').style.display = 'flex';
         initApp();
@@ -602,7 +603,7 @@ async function doLogin() {
 }
 
 function doLogout() {
-    location.reload();
+    api('/api/logout', {method: 'POST'}).finally(() => location.reload());
 }
 
 // Sidebar
@@ -627,7 +628,7 @@ function showTab(tab, el) {
 
 function showAlert(id, msg, type='success') {
   const el = $(id);
-  el.innerHTML = `<div class="alert ${type}"><i class="fa-solid fa-${type==='success'?'circle-check':'circle-exclamation'}"></i> ${msg}</div>`;
+  el.innerHTML = `<div class="alert ${type}"><i class="fa-solid fa-${type==='success'?'circle-check':'circle-exclamation'}"></i> ${esc(msg)}</div>`;
   setTimeout(() => el.innerHTML = '', 4000);
 }
 
@@ -668,8 +669,8 @@ async function loadDashboard() {
   $('dash-ledger-table').querySelector('tbody').innerHTML = recentRows.length
     ? recentRows.map(r => `
       <tr>
-        <td>${r.date}</td>
-        <td>${r.description}</td>
+        <td>${esc(r.date)}</td>
+        <td>${esc(r.description)}</td>
         <td><span class="badge ${r.type.toLowerCase()}">${r.type}</span></td>
         <td>${ghc(r.amount)}</td>
         <td class="${r.running_balance >= 0 ? 'balance-pos' : 'balance-neg'}">${ghc(r.running_balance)}</td>
@@ -681,12 +682,12 @@ async function loadDashboard() {
     <tr>
       <td>
         <div style="display:flex;align-items:center;gap:8px">
-          <div class="avatar">${initials(d.member_name)}</div>
-          ${d.member_name}
+          <div class="avatar">${esc(initials(d.member_name))}</div>
+          ${esc(d.member_name)}
         </div>
       </td>
       <td>${ghc(d.amount)}</td>
-      <td class="text-muted">${d.period_from} &rarr; ${d.period_to}</td>
+      <td class="text-muted">${esc(d.period_from)} &rarr; ${esc(d.period_to)}</td>
     </tr>`).join('');
 }
 
@@ -700,13 +701,13 @@ async function loadDues() {
         <td class="text-muted">${rows.length - i}</td>
         <td>
           <div style="display:flex;align-items:center;gap:8px">
-            <div class="avatar">${initials(d.member_name)}</div>${d.member_name}
+            <div class="avatar">${esc(initials(d.member_name))}</div>${esc(d.member_name)}
           </div>
         </td>
         <td>${ghc(d.amount)}</td>
-        <td>${d.period_from}</td>
-        <td>${d.period_to}</td>
-        <td class="text-muted">${d.created_at.split(' ')[0]}</td>
+        <td>${esc(d.period_from)}</td>
+        <td>${esc(d.period_to)}</td>
+        <td class="text-muted">${esc(d.created_at.split(' ')[0])}</td>
         <td>
           <button class="btn sm danger" onclick="deleteDues(${d.id})">
             <i class="fa-solid fa-trash"></i>
@@ -851,12 +852,12 @@ async function loadLedger() {
     ? rows.map((r, i) => `
       <tr>
         <td class="text-muted">${rows.length - i}</td>
-        <td>${r.date}</td>
-        <td>${r.description}</td>
+        <td>${esc(r.date)}</td>
+        <td>${esc(r.description)}</td>
         <td><span class="badge ${r.type.toLowerCase()}">${r.type}</span></td>
         <td>${ghc(r.amount)}</td>
         <td class="${r.running_balance >= 0 ? 'balance-pos' : 'balance-neg'}">${ghc(r.running_balance)}</td>
-        <td class="text-muted">${r.note || '—'}</td>
+        <td class="text-muted">${esc(r.note) || '—'}</td>
         <td>
           <button class="btn sm danger" onclick="deleteLedger(${r.id})">
             <i class="fa-solid fa-trash"></i>
@@ -929,12 +930,40 @@ async function runQuery() {
     ? rows.map(r => `
       <tr>
         <td><span class="badge ${r.badge}">${r.badge==='dues'?'Dues':r.badge.charAt(0).toUpperCase()+r.badge.slice(1)}</span></td>
-        <td>${r.label}</td>
+        <td>${esc(r.label)}</td>
         <td>${ghc(r.amount)}</td>
-        <td class="text-muted">${r.period}</td>
-        <td class="text-muted">${r.detail}</td>
+        <td class="text-muted">${esc(r.period)}</td>
+        <td class="text-muted">${esc(r.detail)}</td>
       </tr>`).join('')
     : '<tr class="empty-row"><td colspan="5">No records match your search.</td></tr>';
+}
+
+function exportToExcel(tableId, filename) {
+  const table = $(tableId);
+  const headerCells = [...table.querySelectorAll('thead th')];
+  const colIndexes = headerCells.map((th, i) => th.textContent.trim() ? i : -1).filter(i => i !== -1);
+
+  const csvField = v => {
+    const s = String(v ?? '').replace(/\s+/g, ' ').trim();
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+
+  const lines = [colIndexes.map(i => csvField(headerCells[i].textContent)).join(',')];
+  table.querySelectorAll('tbody tr').forEach(tr => {
+    const cells = tr.querySelectorAll('td');
+    if (!cells.length || tr.classList.contains('empty-row')) return;
+    lines.push(colIndexes.map(i => csvField(cells[i] && cells[i].textContent)).join(','));
+  });
+
+  const blob = new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${filename}_${today()}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 function clearQuery() {
@@ -982,18 +1011,25 @@ async function loadMembers() {
       <td class="text-muted">${i+1}</td>
       <td>
         <div style="display:flex;align-items:center;gap:8px">
-          <div class="avatar">${initials(m.name)}</div>
-          <div class="editable-name" id="member-name-${m.id}" onclick="editMemberName(${m.id}, '${m.name}')">${m.name}</div>
+          <div class="avatar">${esc(initials(m.name))}</div>
+          <div class="editable-name" id="member-name-${m.id}" data-id="${m.id}" data-name="${esc(m.name)}">${esc(m.name)}</div>
         </div>
       </td>
       <td>${ghc(duesByMember[m.id] || 0)}</td>
       <td>
-        <button class="btn sm danger" onclick="deleteMember(${m.id},'${m.name}')">
+        <button class="btn sm danger" data-id="${m.id}" data-name="${esc(m.name)}" data-action="delete-member">
           <i class="fa-solid fa-trash"></i>
         </button>
       </td>
     </tr>`).join('');
 }
+
+$('members-table').addEventListener('click', e => {
+  const nameEl = e.target.closest('.editable-name');
+  if (nameEl) { editMemberName(Number(nameEl.dataset.id), nameEl.dataset.name); return; }
+  const delBtn = e.target.closest('[data-action="delete-member"]');
+  if (delBtn) deleteMember(Number(delBtn.dataset.id), delBtn.dataset.name);
+});
 
 function editMemberName(id, currentName) {
     const cell = $(`member-name-${id}`);
@@ -1039,7 +1075,7 @@ async function addMember() {
 }
 
 function deleteMember(id, name) {
-  confirmAction("Remove Member", `Are you completely sure you want to remove <b>${name}</b> from the roster? This will instantly destroy all their dues records.`, async () => {
+  confirmAction("Remove Member", `Are you completely sure you want to remove <b>${esc(name)}</b> from the roster? This will instantly destroy all their dues records.`, async () => {
       await api('/api/members/' + id, {method:'DELETE'});
       loadMemberDropdowns();
       loadMembers();
@@ -1092,9 +1128,9 @@ async function generateReport(type = 'monthly') {
                             <tr>
                                 <td><span class="badge credit">Credit</span></td>
                                 <td>Dues</td>
-                                <td>${d.member_name}</td>
+                                <td>${esc(d.member_name)}</td>
                                 <td>${ghc(d.amount)}</td>
-                                <td class="text-muted">${d.period_from} &rarr; ${d.period_to}</td>
+                                <td class="text-muted">${esc(d.period_from)} &rarr; ${esc(d.period_to)}</td>
                                 <td class="text-muted">${ghc(d.amount)} paid</td>
                             </tr>
                         `).join('') : '<tr><td colspan="6" style="text-align:center">No dues records found</td></tr>'}
@@ -1116,9 +1152,9 @@ async function generateReport(type = 'monthly') {
                     <tbody>
                         ${data.dues.length ? data.dues.map(d => `
                             <tr>
-                                <td>${d.created_at.split(' ')[0]}</td>
-                                <td>${d.member_name}</td>
-                                <td>${d.period_from}${d.period_to ? ' &rarr; ' + d.period_to : ''}</td>
+                                <td>${esc(d.created_at.split(' ')[0])}</td>
+                                <td>${esc(d.member_name)}</td>
+                                <td>${esc(d.period_from)}${d.period_to ? ' &rarr; ' + esc(d.period_to) : ''}</td>
                                 <td>${ghc(d.amount)}</td>
                             </tr>
                         `).join('') : '<tr><td colspan="4" style="text-align:center">No dues collected for this period</td></tr>'}
@@ -1171,8 +1207,8 @@ async function generateReport(type = 'monthly') {
                 <tbody>
                     ${data.ledger.length ? data.ledger.map(r => `
                         <tr>
-                            <td>${r.date}</td>
-                            <td>${r.description}</td>
+                            <td>${esc(r.date)}</td>
+                            <td>${esc(r.description)}</td>
                             <td><span class="badge ${r.type.toLowerCase()}">${r.type}</span></td>
                             <td>${ghc(r.amount)}</td>
                         </tr>
@@ -1189,11 +1225,11 @@ async function generateReport(type = 'monthly') {
 // Init
 async function loadMemberDropdowns() {
   const members = await api('/api/members');
-  const opts = '<option value="">— Select member —</option>' + 
-    members.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
+  const opts = '<option value="">— Select member —</option>' +
+    members.map(m => `<option value="${m.id}">${esc(m.name)}</option>`).join('');
   $('dues-member').innerHTML = opts;
-  $('q-member').innerHTML = '<option value="">— All Members —</option>' + 
-    members.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
+  $('q-member').innerHTML = '<option value="">— All Members —</option>' +
+    members.map(m => `<option value="${m.id}">${esc(m.name)}</option>`).join('');
 
   const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
   const years = [2024, 2025, 2026];
@@ -1217,7 +1253,19 @@ function initApp() {
     updateTime();
 }
 
-window.onload = () => {};
+window.onload = async () => {
+    try {
+        const data = await api('/api/session');
+        if (data.authenticated) {
+            csrfToken = data.csrf_token;
+            $('login-overlay').style.display = 'none';
+            $('app-shell').style.display = 'flex';
+            initApp();
+        }
+    } catch (e) {
+        // Not logged in (or server unreachable) - leave the login screen showing.
+    }
+};
 </script>
 </body>
 </html>
