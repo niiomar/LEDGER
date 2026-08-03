@@ -23,13 +23,17 @@ def month_to_int(s):
 def int_to_month(n):
     return f"{MONTHS[n % 12]} {n // 12}"
 
+MAX_AMOUNT = 1_000_000
+MAX_NAME_LEN = 200
+MAX_TEXT_LEN = 500
+
 def parse_positive_amount(value):
-    """Returns a positive float, or None if value isn't a valid positive number."""
+    """Returns a positive float within a sane bound, or None otherwise."""
     try:
         amount = float(value)
     except (TypeError, ValueError):
         return None
-    return amount if amount > 0 else None
+    return amount if 0 < amount <= MAX_AMOUNT else None
 
 def get_db():
     conn = sqlite3.connect(DB)
@@ -229,6 +233,8 @@ def add_member():
     name = (data.get('name') or '').strip().upper()
     if not name:
         return jsonify({'error': 'Name is required'}), 400
+    if len(name) > MAX_NAME_LEN:
+        return jsonify({'error': f'Name must be {MAX_NAME_LEN} characters or fewer'}), 400
     try:
         with closing(get_db()) as conn, conn:
             cur = conn.execute("INSERT INTO members(name) VALUES(?)", (name,))
@@ -243,6 +249,8 @@ def update_member(mid):
     name = (data.get('name') or '').strip().upper()
     if not name:
         return jsonify({'error': 'Name is required'}), 400
+    if len(name) > MAX_NAME_LEN:
+        return jsonify({'error': f'Name must be {MAX_NAME_LEN} characters or fewer'}), 400
     try:
         with closing(get_db()) as conn, conn:
             conn.execute("UPDATE members SET name=? WHERE id=?", (name, mid))
@@ -429,6 +437,8 @@ def add_ledger():
     note   = (data.get('note') or '').strip()
     if typ not in ('Credit', 'Debit') or not desc or amount is None or not date:
         return jsonify({'error': 'type, description, amount, and date are required'}), 400
+    if len(desc) > MAX_TEXT_LEN or len(note) > MAX_TEXT_LEN:
+        return jsonify({'error': f'Description and note must be {MAX_TEXT_LEN} characters or fewer'}), 400
     with closing(get_db()) as conn, conn:
         cur = conn.execute(
             "INSERT INTO ledger(type,description,amount,date,note) VALUES(?,?,?,?,?)",
@@ -448,6 +458,8 @@ def update_ledger(lid):
     note   = (data.get('note') or '').strip()
     if typ not in ('Credit', 'Debit') or not desc or amount is None or not date:
         return jsonify({'error': 'type, description, amount, and date are required'}), 400
+    if len(desc) > MAX_TEXT_LEN or len(note) > MAX_TEXT_LEN:
+        return jsonify({'error': f'Description and note must be {MAX_TEXT_LEN} characters or fewer'}), 400
     with closing(get_db()) as conn, conn:
         conn.execute(
             "UPDATE ledger SET type=?, description=?, amount=?, date=?, note=? WHERE id=?",
