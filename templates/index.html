@@ -13,9 +13,9 @@
 </head>
 <body>
 
-<div id="confirm-modal" class="modal-overlay" style="display:none;">
+<div id="confirm-modal" class="modal-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="modal-title">
   <div class="modal">
-    <h3><i class="fa-solid fa-triangle-exclamation" style="color:var(--red);"></i> Confirm Deletion</h3>
+    <h3 id="modal-title"><i class="fa-solid fa-triangle-exclamation" style="color:var(--red);"></i> Confirm Deletion</h3>
     <p id="modal-msg">Are you sure you want to delete this record?</p>
     <div class="modal-actions">
       <button class="btn" onclick="$('confirm-modal').style.display='none'">Cancel</button>
@@ -34,11 +34,11 @@
       <h2>Welcome Back</h2>
       <p>Please log in to your account to continue.</p>
       <div class="form-group">
-        <label>Username</label>
+        <label for="login-user">Username</label>
         <input type="text" id="login-user" placeholder="Enter username..." onkeydown="if(event.key==='Enter') $('login-pass').focus()">
       </div>
       <div class="form-group">
-        <label>Password</label>
+        <label for="login-pass">Password</label>
         <input type="password" id="login-pass" placeholder="Enter password..." onkeydown="if(event.key==='Enter') doLogin()">
       </div>
       <div id="login-alert" style="margin-top:10px"></div>
@@ -136,19 +136,19 @@
             <div id="dues-alert"></div>
             <div class="form-grid cols-2">
               <div class="form-group">
-                <label>Member</label>
+                <label for="dues-member">Member</label>
                 <select id="dues-member" onchange="autoFillNextMonth()"><option value="">— Select member —</option></select>
               </div>
               <div class="form-group">
-                <label>Amount Paid (Gh¢) <span id="dues-amount-hint" style="font-weight:400;color:#888;font-size:0.85em"></span></label>
+                <label for="dues-amount">Amount Paid (Gh¢) <span id="dues-amount-hint" style="font-weight:400;color:#888;font-size:0.85em"></span></label>
                 <input type="number" id="dues-amount" placeholder="Auto-calculated from period" min="1" step="0.01" readonly style="background:#f5f5f5;cursor:not-allowed">
               </div>
               <div class="form-group">
-                <label>Paying From (Period)</label>
+                <label for="dues-from">Paying From (Period)</label>
                 <select id="dues-from" onchange="onDuesPeriodChange()"><option value="">— Select period —</option></select>
               </div>
               <div class="form-group">
-                <label>Paying To (Period)</label>
+                <label for="dues-to">Paying To (Period)</label>
                 <select id="dues-to" onchange="onDuesPeriodChange()"><option value="">— Select period —</option></select>
               </div>
             </div>
@@ -179,27 +179,27 @@
             <div id="ledger-alert"></div>
             <div class="form-grid cols-4">
               <div class="form-group">
-                <label>Type</label>
+                <label for="tx-type">Type</label>
                 <select id="tx-type">
                   <option value="Credit">Credit (Income)</option>
                   <option value="Debit">Debit (Expense)</option>
                 </select>
               </div>
               <div class="form-group" style="grid-column: span 2;">
-                <label>Description</label>
-                <input type="text" id="tx-desc" placeholder="e.g. Batteries, Dues, Equipment…">
+                <label for="tx-desc">Description</label>
+                <input type="text" id="tx-desc" placeholder="e.g. Batteries, Dues, Equipment…" maxlength="500">
               </div>
               <div class="form-group">
-                <label>Amount (Gh¢)</label>
-                <input type="number" id="tx-amount" placeholder="e.g. 68" min="0.01" step="0.01">
+                <label for="tx-amount">Amount (Gh¢)</label>
+                <input type="number" id="tx-amount" placeholder="e.g. 68" min="0.01" max="1000000" step="0.01">
               </div>
               <div class="form-group">
-                <label>Date</label>
+                <label for="tx-date">Date</label>
                 <input type="date" id="tx-date">
               </div>
               <div class="form-group" style="grid-column: span 3;">
-                <label>Note (optional)</label>
-                <input type="text" id="tx-note" placeholder="Any additional detail">
+                <label for="tx-note">Note (optional)</label>
+                <input type="text" id="tx-note" placeholder="Any additional detail" maxlength="500">
               </div>
             </div>
             <div class="form-footer">
@@ -229,7 +229,7 @@
         <div class="card">
           <div class="filter-bar">
             <div class="form-group">
-              <label>Record Type</label>
+              <label for="q-type">Record Type</label>
               <select id="q-type" onchange="runQuery()">
                 <option value="all">All Records</option>
                 <option value="dues">Dues Only</option>
@@ -237,21 +237,21 @@
               </select>
             </div>
             <div class="form-group">
-              <label>Member</label>
+              <label for="q-member">Member</label>
               <select id="q-member" onchange="runQuery()">
                 <option value="">— All Members —</option>
               </select>
             </div>
             <div class="form-group">
-              <label>Search Keyword</label>
+              <label for="q-keyword">Search Keyword</label>
               <input type="text" id="q-keyword" placeholder="Search..." oninput="runQuery()">
             </div>
             <div class="form-group">
-              <label>From Month</label>
+              <label for="q-date-from">From Month</label>
               <input type="month" id="q-date-from" onchange="runQuery()">
             </div>
             <div class="form-group">
-              <label>To Month</label>
+              <label for="q-date-to">To Month</label>
               <input type="month" id="q-date-to" onchange="runQuery()">
             </div>
             <button class="btn" onclick="clearQuery()"><i class="fa-solid fa-rotate-left"></i> Reset</button>
@@ -280,8 +280,8 @@
             <div id="member-alert"></div>
             <div class="form-grid cols-2">
               <div class="form-group">
-                <label>Full Name</label>
-                <input type="text" id="new-member-name" placeholder="Enter member name...">
+                <label for="new-member-name">Full Name</label>
+                <input type="text" id="new-member-name" placeholder="Enter member name..." maxlength="200">
               </div>
               <div class="form-group" style="justify-content: flex-end; flex-direction: row; align-items: flex-end;">
                 <button class="btn primary" onclick="addMember()"><i class="fa-solid fa-plus"></i> Add Member</button>
